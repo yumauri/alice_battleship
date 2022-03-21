@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Игры</title>
+    <style type="text/css">
+      body {
+        background-color: white;
+        font-size: 14pt;
+        margin: 10px;
+        padding: 0;
+      }
+      h1 {
+        font-size: 16pt;
+        background-color: lightblue;
+        padding: 10px;
+      }
+      #in_progress,
+      #finished {
+        margin-left: 50px;
+      }
+      span.name {
+        font-style: italic;
+        padding-right: 10px;
+      }
+      span.state {
+        padding-left: 10px;
+      }
+      span.update {
+        padding-left: 10px;
+        font-size: 12pt;
+      }
+      .new,
+      .acquaintance,
+      .await_start,
+      .start_game {
+        color: gray;
+      }
+      .ai_turn,
+      .ai_win {
+        color: red;
+      }
+      .human_turn,
+      .human_win {
+        color: blue;
+      }
+      .cheating {
+        color: maroon;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Текущие игры:</h1>
+    <div id="in_progress"></div>
+    <h1>Законченные игры:</h1>
+    <div id="finished"></div>
+    <script type="application/json" id="data">
+      {{data|safe}}
+    </script>
+    <script>
+      const $in_progress = document.getElementById("in_progress");
+      const $finished = document.getElementById("finished");
+      const $data = document.getElementById("data");
+
+      const data = JSON.parse($data.innerHTML);
+      fillContent(data);
+
+      // update data once in a second
+      (function update() {
+        window.setTimeout(() => {
+          fetch("/games.json")
+            .then((response) => {
+              if (response.ok) {
+                return response.json();
+              } else {
+                throw response;
+              }
+            })
+            .then(fillContent)
+            .catch(console.error)
+            .then(update);
+        }, 1000);
+      })();
+
+      function fillList($element, games, names, states) {
+        while ($element.firstChild) {
+          $element.firstChild.remove();
+        }
+        let has = false;
+        for (let k in games) {
+          const name = names[k];
+          const sessions = games[k];
+          for (let i = 0; i < sessions.length; i++) {
+            has = true;
+            const [session_id, state_id, update] = sessions[i];
+            const state = states[state_id];
+
+            const $row = document.createElement("DIV");
+            const $name = document.createElement("SPAN");
+            const $session = document.createElement("A");
+            const $state = document.createElement("SPAN");
+            const $update = document.createElement("SPAN");
+            $name.innerHTML = `${name} vs Алиса`;
+            $session.innerHTML = session_id;
+            $session.title = session_id;
+            $session.href = `/games/${session_id}`;
+            $state.innerHTML = getStateName(state);
+            if (
+              ["AI_WIN", "HUMAN_WIN", "ABORTED", "CHEATING"].indexOf(
+                states[state_id]
+              ) === -1
+            ) {
+              $update.innerHTML = awaiting(update);
+            } else {
+              $update.innerHTML = "";
+            }
+
+            $name.className = "name";
+            $session.className = "session";
+            $state.className = `state ${state.toLowerCase()}`;
+            $update.className = "update";
+            $row.appendChild($name);
+            $row.appendChild($session);
+            $row.appendChild($state);
+            $row.appendChild($update);
+            $element.appendChild($row);
+          }
+        }
+        if (!has) {
+          const $row = document.createElement("DIV");
+          $row.innerHTML = "Нет игр...";
+          $element.appendChild($row);
+        }
+      }
+
+      function fillContent(data) {
+        const { finished, in_progress, names, states } = data;
+        fillList($in_progress, in_progress, names, states);
+        fillList($finished, finished, names, states);
+      }
+
+      function getStateName(state) {
+        return {
+          NEW: "Новая игра",
+          ACQUAINTANCE: "Знакомство с игроком",
+          AWAIT_START: "Ожидаем начала",
+          START_GAME: "Начало игры",
+          AI_TURN: "Ход Алисы",
+          HUMAN_TURN: "Ход игрока",
+          AI_WIN: "Алиса выиграла",
+          HUMAN_WIN: "Игрок выиграл",
+          ABORTED: "Игра прервана из-за неактивности игрока",
+          CHEATING: "Игра прервана из-за читерства",
+        }[state];
+      }
+
+      function awaiting(update) {
+        let s = Math.round((Date.now() - update) / 1000);
+        let m = Math.floor(s / 60);
+        s = s - m * 60;
+        return (
+          "(ожидание " +
+          (m > 0 ? m + " мин" : "") +
+          (s > 0 ? " " : "") +
+          (s > 0 ? s + " сек" : "") +
+          ")"
+        );
+      }
+    </script>
+  </body>
+</html>

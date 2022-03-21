@@ -1,0 +1,21 @@
+version: '3.6'
+
+services:
+
+  flask:
+    image: yumaa/alice-battleship-skill:latest
+    container_name: alice_battleship_skill
+    ports:
+      - '127.0.0.1:5000:80'
+    depends_on:
+      - redis
+    environment:
+      - SECRET_KEY=HSCzD95QrmGvWi4CLKpJ
+      - REDIS_URL=redis://redis:6379/0
+      - BASE_URL=https://alice-battleship-skill.yumaa.dev
+    restart: unless-stopped
+
+  redis:
+    image: redis:6.2.2-alpine
+    container_name: alice_battleship_skill_redis
+    restart: unless-stopped

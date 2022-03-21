@@ -1,0 +1,10 @@
+alice-battleship-skill.yumaa.dev:443 {
+  import /etc/caddy/conf.d/common.inc
+  tls yumaa.verdin@gmail.com
+
+  proxy / flask:80 {
+    header_upstream Host {host}
+    header_upstream X-Real-IP {remote}
+    header_upstream X-Forwarded-For {remote}
+  }
+}

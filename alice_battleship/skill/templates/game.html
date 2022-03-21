@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Игра</title>
+    <style type="text/css">
+      body {
+        background-color: white;
+        font-size: 14pt;
+        margin: 10px;
+        padding: 0;
+      }
+      h1 {
+        font-size: 16pt;
+        background-color: lightblue;
+        padding: 10px;
+      }
+      #name {
+        font-style: italic;
+      }
+      #state {
+        font-size: 14pt;
+        font-weight: normal;
+        padding-left: 10px;
+      }
+      #update {
+        font-size: 12pt;
+        font-weight: normal;
+        padding-left: 10px;
+      }
+      .new,
+      .acquaintance,
+      .await_start,
+      .start_game {
+        color: gray;
+      }
+      .ai_turn,
+      .ai_win {
+        color: red;
+      }
+      .human_turn,
+      .human_win {
+        color: blue;
+      }
+      .cheating {
+        color: maroon;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>
+      Играет:
+      <span id="name"></span>
+      <span id="state"></span>
+      <span id="update"></span>
+    </h1>
+    <canvas id="fields" width="690" height="360"></canvas>
+    <script type="application/json" id="data">
+      {{data|safe}}
+    </script>
+    <script type="text/javascript">
+      const $name = document.getElementById("name");
+      const $state = document.getElementById("state");
+      const $update = document.getElementById("update");
+      const $data = document.getElementById("data");
+      const $canvas = document.getElementById("fields");
+
+      const data = JSON.parse($data.innerHTML);
+      var ctx = $canvas.getContext("2d");
+
+      fillContent(data);
+
+      // update data once in a second
+      if (
+        ["AI_WIN", "HUMAN_WIN", "ABORTED", "CHEATING"].indexOf(
+          data.states[data.state]
+        ) === -1
+      ) {
+        (function update() {
+          window.setTimeout(() => {
+            fetch(location.href + ".json")
+              .then((response) => {
+                if (response.ok) {
+                  return response.json();
+                } else {
+                  throw response;
+                }
+              })
+              .then(fillContent)
+              .catch(console.error)
+              .then(update);
+          }, 1000);
+        })();
+      }
+
+      function fillContent(data) {
+        $name.innerHTML = `${data.name} vs Алиса`;
+        const state = data.states[data.state];
+        $state.innerHTML = getStateName(state);
+        $state.className = state.toLowerCase();
+        if (
+          ["AI_WIN", "HUMAN_WIN", "ABORTED", "CHEATING"].indexOf(state) === -1
+        ) {
+          $update.innerHTML = awaiting(data.update);
+        } else {
+          $update.innerHTML = "";
+        }
+        drawFields(data);
+      }
+
+      function getStateName(state) {
+        return {
+          NEW: "Новая игра",
+          ACQUAINTANCE: "Знакомство с игроком",
+          AWAIT_START: "Ожидаем начала",
+          START_GAME: "Начало игры",
+          AI_TURN: "Ход Алисы",
+          HUMAN_TURN: "Ход игрока",
+          AI_WIN: "Алиса выиграла",
+          HUMAN_WIN: "Игрок выиграл",
+          ABORTED: "Игра прервана из-за неактивности игрока",
+          CHEATING: "Игра прервана из-за читерства",
+        }[state];
+      }
+
+      function awaiting(update) {
+        let s = Math.round((Date.now() - update) / 1000);
+        let m = Math.floor(s / 60);
+        s = s - m * 60;
+        return (
+          "(ожидание " +
+          (m > 0 ? m + " мин" : "") +
+          (s > 0 ? " " : "") +
+          (s > 0 ? s + " сек" : "") +
+          ")"
+        );
+      }
+
+      function drawFields(data) {
+        const ai = data.ai;
+        const human = data.human;
+
+        ctx.clearRect(0, 0, $canvas.width, $canvas.height);
+        drawField(human, 0, 0, false, data.values);
+        drawField(ai, 330, 0, true, data.values);
+      }
+
+      function drawField(field, x, y, right, values) {
+        ctx.fillStyle = "darkblue";
+
+        // draw coordinates
+        const letters = "АБВГДЕЖЗИК".split("");
+        ctx.font = "15px serif";
+        for (let i = 0; i < 10; i++) {
+          ctx.fillText(letters[i], 40 + x + i * 30, y + 20);
+          ctx.fillText(letters[i], 40 + x + i * 30, y + 350);
+
+          var m = ctx.measureText(i + 1);
+          ctx.fillText(i + 1, 30 - 15 + x - m.width / 2, y + 50 + i * 30);
+          if (right) {
+            ctx.fillText(i + 1, 345 + x - m.width / 2, y + 50 + i * 30);
+          }
+        }
+
+        // draw cells
+        for (let i = 0; i < 10; i++) {
+          for (let j = 0; j < 10; j++) {
+            ctx.strokeStyle = "lightblue";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 30 + j * 30, y + 30 + i * 30, 30, 30);
+            drawCell(field[i][j], x + 30 + j * 30, y + 30 + i * 30, values);
+          }
+        }
+
+        // outline sank ships
+        function getShip(row, col) {
+          let width = 1;
+          let height = 1;
+          field[row][col] === -values.SINK;
+          while (field[row] && field[row][col + width] === values.SINK) {
+            field[row][col + width] = -values.SINK;
+            width++;
+          }
+          while (
+            field[row + height] &&
+            field[row + height][col] === values.SINK
+          ) {
+            field[row + height][col] = -values.SINK;
+            height++;
+          }
+          return [width, height];
+        }
+
+        for (let i = 0; i < 10; i++) {
+          for (let j = 0; j < 10; j++) {
+            if (field[i][j] === values.SINK) {
+              const [width, height] = getShip(i, j);
+              ctx.strokeStyle = "darkred";
+              ctx.lineWidth = 1;
+              ctx.strokeRect(
+                x + 30 + j * 30,
+                y + 30 + i * 30,
+                width * 30,
+                height * 30
+              );
+            }
+          }
+        }
+
+        // draw field
+        ctx.strokeStyle = "darkblue";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x + 30, y + 30, 300, 300);
+      }
+
+      function drawCell(
+        cell,
+        x,
+        y,
+        { SHIP, VISIBLE_HALO, HALO, HIT, SINK, MISS, TRY }
+      ) {
+        if (cell === SHIP) {
+          ctx.strokeStyle = "blue";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (i = 0; i < 5; i++) {
+            ctx.moveTo(x + 27 - i * 5, y + 3);
+            ctx.lineTo(x + 3, y + 27 - i * 5);
+          }
+          for (i = 1; i < 5; i++) {
+            ctx.moveTo(x + 27, y + 3 + i * 5);
+            ctx.lineTo(x + 3 + i * 5, y + 27);
+          }
+          ctx.stroke();
+        } else if (cell === VISIBLE_HALO || cell === HALO) {
+          ctx.fillStyle = "lightgray";
+          ctx.fillRect(x + 13, y + 14, 3, 3);
+        } else if (cell === HIT) {
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(x + 7, y + 7);
+          ctx.lineTo(x + 23, y + 23);
+          ctx.moveTo(x + 23, y + 7);
+          ctx.lineTo(x + 7, y + 23);
+          ctx.stroke();
+        } else if (cell === SINK || cell === -SINK) {
+          ctx.strokeStyle = "darkred";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x + 7, y + 7);
+          ctx.lineTo(x + 23, y + 23);
+          ctx.moveTo(x + 23, y + 7);
+          ctx.lineTo(x + 7, y + 23);
+          ctx.stroke();
+        } else if (cell === MISS) {
+          ctx.fillStyle = "black";
+          ctx.fillRect(x + 13, y + 14, 3, 3);
+        } else if (cell === TRY) {
+          ctx.fillStyle = "magenta";
+          ctx.font = "bold 15px sans-serif";
+          ctx.fillText("?", x + 10, y + 20);
+        }
+      }
+    </script>
+  </body>
+</html>
